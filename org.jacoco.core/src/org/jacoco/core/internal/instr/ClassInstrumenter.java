@@ -23,63 +23,79 @@ import org.objectweb.asm.MethodVisitor;
  */
 public class ClassInstrumenter extends ClassProbesVisitor {
 
-	private final IProbeArrayStrategy probeArrayStrategy;
+    private final IProbeArrayStrategy probeArrayStrategy;
+    private final IProbeInserterFactory probeInserterFactory;
 
-	private String className;
+    private String className;
 
-	/**
-	 * Emits a instrumented version of this class to the given class visitor.
-	 *
-	 * @param probeArrayStrategy
-	 *            this strategy will be used to access the probe array
-	 * @param cv
-	 *            next delegate in the visitor chain will receive the
-	 *            instrumented class
-	 */
-	public ClassInstrumenter(final IProbeArrayStrategy probeArrayStrategy,
-			final ClassVisitor cv) {
-		super(cv);
-		this.probeArrayStrategy = probeArrayStrategy;
-	}
+    /**
+     * Emits a instrumented version of this class to the given class visitor.
+     *
+     * @param probeArrayStrategy this strategy will be used to access the probe array
+     * @param cv                 next delegate in the visitor chain will receive the
+     *                           instrumented class
+     */
+    public ClassInstrumenter(final IProbeArrayStrategy probeArrayStrategy,
+                             final ClassVisitor cv) {
+        super(cv);
+        this.probeArrayStrategy = probeArrayStrategy;
+        this.probeInserterFactory = new IProbeInserterFactory() {
+            @Override
+            public ProbeInserter makeProbeInserter(int access, String name,
+                                                   String desc, MethodVisitor mv,
+                                                   IProbeArrayStrategy arrayStrategy) {
+                return new ProbeInserter(access, name, desc, mv, arrayStrategy);
+            }
+        };
+    }
 
-	@Override
-	public void visit(final int version, final int access, final String name,
-			final String signature, final String superName,
-			final String[] interfaces) {
-		this.className = name;
-		super.visit(version, access, name, signature, superName, interfaces);
-	}
+    public ClassInstrumenter(final IProbeArrayStrategy probeArrayStrategy,
+                             final IProbeInserterFactory probeInserterFactory,
+                             final ClassVisitor cv) {
+        super(cv);
+        this.probeArrayStrategy = probeArrayStrategy;
+        this.probeInserterFactory = probeInserterFactory;
+    }
 
-	@Override
-	public FieldVisitor visitField(final int access, final String name,
-			final String desc, final String signature, final Object value) {
-		InstrSupport.assertNotInstrumented(name, className);
-		return super.visitField(access, name, desc, signature, value);
-	}
+    @Override
+    public void visit(final int version, final int access, final String name,
+                      final String signature, final String superName,
+                      final String[] interfaces) {
+        this.className = name;
+        super.visit(version, access, name, signature, superName, interfaces);
+    }
 
-	@Override
-	public MethodProbesVisitor visitMethod(final int access, final String name,
-			final String desc, final String signature,
-			final String[] exceptions) {
+    @Override
+    public FieldVisitor visitField(final int access, final String name,
+                                   final String desc, final String signature, final Object value) {
+        InstrSupport.assertNotInstrumented(name, className);
+        return super.visitField(access, name, desc, signature, value);
+    }
 
-		InstrSupport.assertNotInstrumented(name, className);
+    @Override
+    public MethodProbesVisitor visitMethod(final int access, final String name,
+                                           final String desc, final String signature,
+                                           final String[] exceptions) {
 
-		final MethodVisitor mv = cv.visitMethod(access, name, desc, signature,
-				exceptions);
+        InstrSupport.assertNotInstrumented(name, className);
 
-		if (mv == null) {
-			return null;
-		}
-		final MethodVisitor frameEliminator = new DuplicateFrameEliminator(mv);
-		final ProbeInserter probeVariableInserter = new ProbeInserter(access,
-				name, desc, frameEliminator, probeArrayStrategy);
-		return new MethodInstrumenter(probeVariableInserter,
-				probeVariableInserter);
-	}
+        final MethodVisitor mv = cv.visitMethod(access, name, desc, signature,
+                exceptions);
 
-	@Override
-	public void visitTotalProbeCount(final int count) {
-		probeArrayStrategy.addMembers(cv, count);
-	}
+        if (mv == null) {
+            return null;
+        }
+        final MethodVisitor frameEliminator = new DuplicateFrameEliminator(mv);
+        final ProbeInserter probeVariableInserter =
+                probeInserterFactory.makeProbeInserter(access, name, desc,
+                        frameEliminator, probeArrayStrategy);
+        return new MethodInstrumenter(probeVariableInserter,
+                probeVariableInserter);
+    }
+
+    @Override
+    public void visitTotalProbeCount(final int count) {
+        probeArrayStrategy.addMembers(cv, count);
+    }
 
 }
