@@ -25,7 +25,7 @@ import org.objectweb.asm.TypePath;
  * addition the probe array has to be retrieved at the beginning of the method
  * and stored in a local variable.
  */
-class ProbeInserter extends MethodVisitor implements IProbeInserter {
+public class ProbeInserter extends MethodVisitor implements IProbeInserter {
 
 	private final IProbeArrayStrategy arrayStrategy;
 
@@ -36,7 +36,7 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 	private final boolean clinit;
 
 	/** Position of the inserted variable. */
-	private final int variable;
+	protected final int variable;
 
 	/** Label for the new beginning of the method */
 	private final Label beginLabel;
@@ -59,7 +59,7 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 	 *            callback to create the code that retrieves the reference to
 	 *            the probe array
 	 */
-	ProbeInserter(final int access, final String name, final String desc,
+	public ProbeInserter(final int access, final String name, final String desc,
 			final MethodVisitor mv, final IProbeArrayStrategy arrayStrategy) {
 		super(InstrSupport.ASM_API_VERSION, mv);
 		this.clinit = InstrSupport.CLINIT_NAME.equals(name);
@@ -93,6 +93,10 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 		// Stack[0]: [Z
 
 		mv.visitInsn(Opcodes.BASTORE);
+	}
+
+	protected Object getLocalVariableType() {
+		return InstrSupport.DATAFIELD_DESC;
 	}
 
 	@Override
@@ -130,6 +134,10 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 	public AnnotationVisitor visitLocalVariableAnnotation(final int typeRef,
 			final TypePath typePath, final Label[] start, final Label[] end,
 			final int[] index, final String descriptor, final boolean visible) {
+		if (getLocalVariableType() == null) {
+			return mv.visitLocalVariableAnnotation(typeRef, typePath, start,
+					end, index, descriptor, visible);
+		}
 		final int[] newIndex = new int[index.length];
 		for (int i = 0; i < newIndex.length; i++) {
 			newIndex[i] = map(index[i]);
@@ -149,6 +157,9 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 	}
 
 	private int map(final int var) {
+		if (getLocalVariableType() == null) {
+			return var;
+		}
 		if (var < variable) {
 			return var;
 		} else {
@@ -165,13 +176,18 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 					"ClassReader.accept() should be called with EXPAND_FRAMES flag");
 		}
 
+		if (getLocalVariableType() == null) {
+			mv.visitFrame(type, nLocal, local, nStack, stack);
+			return;
+		}
+
 		final Object[] newLocal = new Object[Math.max(nLocal, variable) + 1];
 		int idx = 0; // Arrays index for existing locals
 		int newIdx = 0; // Array index for new locals
 		int pos = 0; // Current variable position
 		while (idx < nLocal || pos <= variable) {
 			if (pos == variable) {
-				newLocal[newIdx++] = InstrSupport.DATAFIELD_DESC;
+				newLocal[newIdx++] = getLocalVariableType();
 				pos++;
 			} else {
 				if (idx < nLocal) {

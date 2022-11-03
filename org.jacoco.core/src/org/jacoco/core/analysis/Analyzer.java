@@ -32,6 +32,9 @@ import org.jacoco.core.internal.analysis.ClassCoverageImpl;
 import org.jacoco.core.internal.analysis.StringPool;
 import org.jacoco.core.internal.data.CRC64;
 import org.jacoco.core.internal.flow.ClassProbesAdapter;
+import org.jacoco.core.internal.flow.ClassProbesVisitor;
+import org.jacoco.core.internal.flow.ClassProbesAdapter;
+import org.jacoco.core.internal.flow.IClassProbesAdapterFactory;
 import org.jacoco.core.internal.instr.InstrSupport;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -53,6 +56,8 @@ public class Analyzer {
 
 	private final StringPool stringPool;
 
+	private final IClassProbesAdapterFactory classProbesAdapterFactory;
+
 	/**
 	 * Creates a new analyzer reporting to the given output.
 	 *
@@ -64,9 +69,22 @@ public class Analyzer {
 	 */
 	public Analyzer(final ExecutionDataStore executionData,
 			final ICoverageVisitor coverageVisitor) {
+		this(executionData, coverageVisitor, new IClassProbesAdapterFactory() {
+			@Override
+			public ClassProbesAdapter makeClassProbesAdapter(
+					ClassProbesVisitor cv, boolean trackFrames) {
+				return new ClassProbesAdapter(cv, trackFrames);
+			}
+		});
+	}
+
+	public Analyzer(final ExecutionDataStore executionData,
+			final ICoverageVisitor coverageVisitor,
+			final IClassProbesAdapterFactory classProbesAdapterFactory) {
 		this.executionData = executionData;
 		this.coverageVisitor = coverageVisitor;
 		this.stringPool = new StringPool();
+		this.classProbesAdapterFactory = classProbesAdapterFactory;
 	}
 
 	/**
@@ -100,7 +118,8 @@ public class Analyzer {
 				coverageVisitor.visitCoverage(coverage);
 			}
 		};
-		return new ClassProbesAdapter(analyzer, false);
+		return classProbesAdapterFactory.makeClassProbesAdapter(analyzer,
+				false);
 	}
 
 	private void analyzeClass(final byte[] source) {

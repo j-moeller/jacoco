@@ -24,6 +24,7 @@ import org.objectweb.asm.MethodVisitor;
 public class ClassInstrumenter extends ClassProbesVisitor {
 
 	private final IProbeArrayStrategy probeArrayStrategy;
+	private final IProbeInserterFactory probeInserterFactory;
 
 	private String className;
 
@@ -40,6 +41,24 @@ public class ClassInstrumenter extends ClassProbesVisitor {
 			final ClassVisitor cv) {
 		super(cv);
 		this.probeArrayStrategy = probeArrayStrategy;
+		this.probeInserterFactory = new IProbeInserterFactory() {
+
+			@Override
+			public ProbeInserter makeProbeInserter(int access, String name,
+					String desc, MethodVisitor mv,
+					IProbeArrayStrategy arrayStrategy) {
+				return new ProbeInserter(access, name, desc, mv,
+						probeArrayStrategy);
+			}
+		};
+	}
+
+	public ClassInstrumenter(final IProbeArrayStrategy probeArrayStrategy,
+			final IProbeInserterFactory probeInserterFactory,
+			final ClassVisitor cv) {
+		super(cv);
+		this.probeArrayStrategy = probeArrayStrategy;
+		this.probeInserterFactory = probeInserterFactory;
 	}
 
 	@Override
@@ -71,8 +90,8 @@ public class ClassInstrumenter extends ClassProbesVisitor {
 			return null;
 		}
 		final MethodVisitor frameEliminator = new DuplicateFrameEliminator(mv);
-		final ProbeInserter probeVariableInserter = new ProbeInserter(access,
-				name, desc, frameEliminator, probeArrayStrategy);
+		final ProbeInserter probeVariableInserter = probeInserterFactory
+				.makeProbeInserter(access, name, desc, mv, probeArrayStrategy);
 		return new MethodInstrumenter(probeVariableInserter,
 				probeVariableInserter);
 	}
